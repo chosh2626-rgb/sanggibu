@@ -1,0 +1,846 @@
+<title>모의면접 자료 생성기</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+KR:wght@400;500;600;700&family=Noto+Serif+KR:wght@700;900&display=swap">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.6.0/mammoth.browser.min.js"></script>
+<style>
+/* Layout: left = 입력 서류철(정보·자료·옵션·진행), right = 완성 자료 미리보기/코드. Stacks under 900px. */
+:root{
+  --bg:#edf1f3; --panel:#ffffff; --ink:#17232b; --muted:#5a6a74; --line:#d3dce1;
+  --accent:#0e5a6f; --accent-ink:#ffffff; --accent-soft:#e3eff2;
+  --warn:#9a5800; --warn-soft:#fff1d9; --bad:#a3262a; --bad-soft:#fbe5e5; --good:#1d7149; --good-soft:#e1f3e9;
+  --display:'Noto Serif KR','Nanum Myeongjo',serif;
+  --body:'IBM Plex Sans KR','Apple SD Gothic Neo','Malgun Gothic',sans-serif;
+  --mono:ui-monospace,'SFMono-Regular',Consolas,'D2Coding',monospace;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#10171c; --panel:#172128; --ink:#e3eaee; --muted:#93a4ae; --line:#2a3943;
+  --accent:#62b4c8; --accent-ink:#0a1a20; --accent-soft:#1b343d;
+  --warn:#f0b45c; --warn-soft:#3a2b12; --bad:#f29090; --bad-soft:#3d1c1d; --good:#6fd29d; --good-soft:#163428;
+  color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#10171c; --panel:#172128; --ink:#e3eaee; --muted:#93a4ae; --line:#2a3943;
+  --accent:#62b4c8; --accent-ink:#0a1a20; --accent-soft:#1b343d;
+  --warn:#f0b45c; --warn-soft:#3a2b12; --bad:#f29090; --bad-soft:#3d1c1d; --good:#6fd29d; --good-soft:#163428;
+  color-scheme:dark}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--ink);font-family:var(--body);font-size:14px;line-height:1.55}
+.app{max-width:1440px;margin:0 auto;padding-block:28px 56px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));display:grid;gap:22px}
+header{display:grid;gap:6px}
+.eyebrow{font-size:12px;letter-spacing:.08em;color:var(--accent);font-weight:600}
+h1{font-family:var(--display);font-weight:900;font-size:clamp(24px,3.2vw,32px);line-height:1.2;margin:0;text-wrap:balance}
+.lede{color:var(--muted);margin:0;max-width:64ch}
+.grid{display:grid;grid-template-columns:minmax(0,410px) minmax(0,1fr);gap:22px;align-items:start}
+@media (max-width:900px){.grid{grid-template-columns:minmax(0,1fr)}}
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:10px;min-width:0}
+.form{display:grid}
+.sec{padding:18px 18px 20px;display:grid;gap:12px;border-top:1px solid var(--line)}
+.sec:first-child{border-top:0}
+.sec h2{margin:0;font-size:13px;font-weight:700;display:flex;align-items:baseline;gap:8px}
+.sec h2 .n{font-family:var(--display);color:var(--accent);font-size:15px}
+.fields{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.fields .wide{grid-column:1/-1}
+label.f{display:grid;gap:4px;font-size:12px;color:var(--muted);font-weight:500}
+input[type=text],textarea{font:inherit;color:var(--ink);background:var(--bg);border:1px solid var(--line);border-radius:6px;padding:8px 10px;width:100%;min-width:0}
+textarea{resize:vertical;min-height:84px;font-size:13px}
+input:focus-visible,textarea:focus-visible,button:focus-visible,summary:focus-visible,.pick:focus-within{outline:2px solid var(--accent);outline-offset:2px}
+.slot{border:1.5px dashed var(--line);border-radius:8px;padding:12px;display:grid;gap:8px;transition:border-color .15s,background .15s}
+.slot.drag{border-color:var(--accent);background:var(--accent-soft)}
+.slot.ok{border-style:solid;border-color:color-mix(in srgb,var(--accent) 55%,var(--line))}
+.slot.err{border-style:solid;border-color:var(--bad)}
+.slot-head{display:flex;justify-content:space-between;align-items:center;gap:8px}
+.slot-title{font-weight:600}
+.tag{font-size:11px;padding:1px 7px;border-radius:999px;background:var(--bg);color:var(--muted);border:1px solid var(--line);white-space:nowrap}
+.tag.req{color:var(--accent);border-color:color-mix(in srgb,var(--accent) 40%,var(--line))}
+.hint{font-size:12px;color:var(--muted)}
+.slot-row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.pick{position:relative;display:inline-flex}
+.pick input{position:absolute;inset:0;opacity:0;cursor:pointer;width:100%}
+.status{font-size:12px;color:var(--muted);min-width:0;overflow-wrap:anywhere}
+.status.ok{color:var(--good)} .status.err{color:var(--bad)} .status.warn{color:var(--warn)}
+details.paste summary{font-size:12px;color:var(--muted);cursor:pointer;width:max-content}
+details.paste textarea{margin-top:6px}
+.btn{font:inherit;font-weight:600;border-radius:6px;padding:8px 14px;border:1px solid var(--line);background:var(--panel);color:var(--ink);cursor:pointer;display:inline-flex;align-items:center;gap:6px;white-space:nowrap}
+.btn:hover{border-color:var(--accent)}
+.btn.sm{padding:5px 10px;font-size:12px}
+.btn.primary{background:var(--accent);color:var(--accent-ink);border-color:var(--accent);padding:11px 18px;font-size:15px}
+.btn:disabled{opacity:.5;cursor:not-allowed}
+.check-row{display:flex;gap:8px;align-items:flex-start;font-size:13px}
+.check-row input{margin-top:3px;accent-color:var(--accent)}
+.swatches{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.sw{width:26px;height:26px;border-radius:50%;border:2px solid var(--panel);box-shadow:0 0 0 1px var(--line);cursor:pointer;padding:0}
+.sw[aria-pressed=true]{box-shadow:0 0 0 2px var(--ink)}
+.go{display:grid;gap:10px}
+.go-row{display:flex;gap:8px;flex-wrap:wrap}
+.notice{font-size:12px;padding:10px 12px;border-radius:6px;background:var(--warn-soft);color:var(--warn)}
+.steps{list-style:none;margin:0;padding:0;display:grid;gap:6px}
+.steps li{display:flex;justify-content:space-between;align-items:center;gap:8px;font-size:13px;padding:7px 10px;border-radius:6px;background:var(--bg)}
+.steps .lab{min-width:0}
+.pill{font-size:11px;font-weight:600;padding:2px 8px;border-radius:999px;white-space:nowrap;font-variant-numeric:tabular-nums;background:var(--panel);color:var(--muted);border:1px solid var(--line)}
+.pill.run{color:var(--accent);border-color:var(--accent)}
+.pill.done{background:var(--good-soft);color:var(--good);border-color:transparent}
+.pill.err{background:var(--bad-soft);color:var(--bad);border-color:transparent}
+.step-err{font-size:12px;color:var(--bad);padding:0 10px}
+.out{display:grid;min-width:0}
+.bar{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;padding:12px 14px;border-bottom:1px solid var(--line)}
+.tabs{display:flex;gap:4px;background:var(--bg);padding:3px;border-radius:7px}
+.tab{font:inherit;font-size:13px;font-weight:600;border:0;background:transparent;color:var(--muted);padding:6px 12px;border-radius:5px;cursor:pointer}
+.tab[aria-selected=true]{background:var(--panel);color:var(--ink);box-shadow:0 1px 2px rgba(0,0,0,.08)}
+.acts{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.meta-line{font-size:12px;color:var(--muted);padding:8px 14px;border-bottom:1px solid var(--line);display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.meta-line .tag.ex{background:var(--warn-soft);color:var(--warn);border-color:transparent}
+.stage{padding:14px;background:color-mix(in srgb,var(--bg) 70%,var(--panel));border-radius:0 0 10px 10px;min-width:0}
+#frame{width:100%;border:0;display:block;min-height:640px;background:#f8f9fa;border-radius:6px}
+.codewrap{overflow:auto;max-height:78vh;border-radius:6px;background:var(--bg);border:1px solid var(--line)}
+pre{margin:0;padding:14px;font-family:var(--mono);font-size:12px;line-height:1.5;white-space:pre;color:var(--ink)}
+.toast{font-size:12px;color:var(--good)}
+.fine{font-size:12px;color:var(--muted);margin:0}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+
+<div class="app">
+  <header>
+    <div class="eyebrow">수시 면접 대비 · 2027학년도</div>
+    <h1>모의면접 자료 생성기</h1>
+    <p class="lede">학교생활기록부, 모집요강, 면접 기출 자료를 올리면 학생 맞춤 예상 질문과 모범답안, 위험 질문, 평가표를 담은 면접 자료를 HTML로 만들어 줍니다.</p>
+  </header>
+
+  <div class="grid">
+    <form class="panel form" id="form" novalidate>
+      <section class="sec">
+        <h2><span class="n">1</span>학생·지원 정보</h2>
+        <div class="fields">
+          <label class="f">학생명<input type="text" id="f-name" placeholder="홍길동" autocomplete="off"></label>
+          <label class="f">대학명<input type="text" id="f-univ" placeholder="인하대학교" autocomplete="off"></label>
+          <label class="f">모집단위(학과)<input type="text" id="f-dept" placeholder="산업경영공학과" autocomplete="off"></label>
+          <label class="f">전형명<input type="text" id="f-track" placeholder="인하미래인재(면접형)" autocomplete="off"></label>
+        </div>
+      </section>
+
+      <section class="sec">
+        <h2><span class="n">2</span>자료 올리기</h2>
+        <div id="slots" style="display:grid;gap:10px"></div>
+        <p class="fine">PDF·DOCX·TXT·HTML·이미지를 읽습니다. HWP는 한글에서 PDF로 저장해 올려 주세요. 파일 내용은 생성할 때만 Claude에 보내고 이 페이지에 저장하지 않습니다.</p>
+      </section>
+
+      <section class="sec">
+        <h2><span class="n">3</span>옵션</h2>
+        <label class="check-row"><input type="checkbox" id="f-preset"><span>사전 면접 질문을 공개한 대학입니다<br><span class="hint">자료 끝에 ‘대학 사전 공개 질문 모범답안’ 섹션이 추가됩니다.</span></span></label>
+        <label class="f" id="preset-box" hidden>공개 질문 (한 줄에 한 문항, 비우면 올린 자료에서 찾음)
+          <textarea id="f-preset-qs" placeholder="자기소개와 함께 지원동기를 말해주세요.&#10;자신의 장점과 단점을 말해주세요."></textarea>
+        </label>
+        <div class="f" style="gap:6px">자료 강조색
+          <div class="swatches" id="swatches"></div>
+        </div>
+      </section>
+
+      <section class="sec go">
+        <div class="notice" id="no-sample" hidden>이 페이지를 Claude 앱 또는 claude.ai에서 열어야 자료를 생성할 수 있어요.</div>
+        <div class="go-row">
+          <button type="submit" class="btn primary" id="btn-go">면접 자료 생성</button>
+          <button type="button" class="btn" id="btn-stop" hidden>중지</button>
+        </div>
+        <p class="fine" id="go-hint">생성은 보통 2~5분 걸립니다. 처음 한 번 Claude 사용 허용을 묻습니다.</p>
+        <ul class="steps" id="steps" hidden>
+          <li data-step="read"><span class="lab">자료 읽기·정리</span><span class="pill">대기</span></li>
+          <li data-step="a"><span class="lab">전형 분석·학생부 TOP 10·위험 질문·평가표</span><span class="pill">대기</span></li>
+          <li data-step="b"><span class="lab">예상 질문·모범답안·꼬리질문</span><span class="pill">대기</span></li>
+          <li data-step="doc"><span class="lab">HTML 문서 만들기</span><span class="pill">대기</span></li>
+        </ul>
+        <div id="step-errs"></div>
+      </section>
+    </form>
+
+    <section class="panel out" aria-label="완성 자료">
+      <div class="bar">
+        <div class="tabs" role="tablist">
+          <button class="tab" role="tab" id="tab-view" aria-selected="true">미리보기</button>
+          <button class="tab" role="tab" id="tab-code" aria-selected="false">HTML 코드</button>
+        </div>
+        <div class="acts">
+          <span class="toast" id="toast" aria-live="polite"></span>
+          <button class="btn sm" id="btn-copy" type="button">코드 복사</button>
+          <button class="btn sm" id="btn-save" type="button" hidden>HTML 파일 저장</button>
+        </div>
+      </div>
+      <div class="meta-line" id="meta-line"></div>
+      <div class="stage">
+        <iframe id="frame" title="면접 자료 미리보기" sandbox="allow-same-origin"></iframe>
+        <div class="codewrap" id="codewrap" hidden><pre><code id="code"></code></pre></div>
+      </div>
+    </section>
+  </div>
+</div>
+
+<script>
+(() => {
+const $ = s => document.querySelector(s);
+const enc = new TextEncoder();
+const bytes = s => enc.encode(s).length;
+const arr = x => Array.isArray(x) ? x : [];
+const PDF_WORKER = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+const STORE = 'mockint.v1';
+const COLORS = ['#0d5c75', '#004b97', '#7a1f3d', '#2f5d34', '#5b3f8c', '#8a4b0f', '#333f48'];
+
+const SLOTS = [
+  { key: 'rec', label: '학교생활기록부', hint: '나이스 출력 PDF 권장', req: true },
+  { key: 'guide', label: '대학 수시 모집요강', hint: '전체 요강도 됩니다. 해당 학과·전형 쪽을 골라 읽습니다.', req: true },
+  { key: 'past', label: '면접 기출·안내 자료', hint: '선행학습영향평가보고서, 면접 안내, 기출 질문 등', req: false },
+];
+const files = { rec: null, guide: null, past: null };
+const reading = {};
+let sample = null, downloads = null, imageLimit = 0;
+let current = null;        // {meta, a, b, accent, example?}
+let accent = COLORS[0];
+let job = null;            // {prompts:{a,b}, imgs, meta}
+const ctls = {};
+
+/* ---------- text helpers ---------- */
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+function fmt(s) {
+  if (s == null) return '';
+  return esc(String(s))
+    .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+    .replace(/==(.+?)==/g, '<span class="highlight">$1</span>')
+    .replace(/\[학생 본인의 실제 경험 확인 필요\]/g, '<span class="check">[학생 본인의 실제 경험 확인 필요]</span>')
+    .replace(/\n/g, '<br>');
+}
+const quote = h => /^["“]/.test(h) ? h : `"${h}"`;
+function clean(s) {
+  return String(s || '').replace(/\r/g, '').replace(/[ \t 　]+/g, ' ').replace(/ *\n */g, '\n').replace(/\n{3,}/g, '\n\n').trim();
+}
+function cutBytes(s, n) {
+  if (n <= 0) return '';
+  if (bytes(s) <= n) return s;
+  const out = new TextDecoder().decode(enc.encode(s).slice(0, Math.max(0, n - 30))).replace(/\uFFFD+$/, '');
+  return out + '\n…(분량 제한으로 이하 생략)';
+}
+function stripRepeated(pages) {
+  if (pages.length < 3) return pages;
+  const count = new Map();
+  pages.forEach(p => new Set(p.split('\n').map(l => l.trim()).filter(l => l && l.length <= 60)).forEach(l => count.set(l, (count.get(l) || 0) + 1)));
+  const lim = Math.max(3, pages.length * 0.5);
+  return pages.map(p => p.split('\n').filter(l => (count.get(l.trim()) || 0) < lim).join('\n'));
+}
+function mix(a, b, t) {
+  const p = h => { h = h.replace('#', ''); if (h.length === 3) h = h.split('').map(c => c + c).join(''); return [0, 2, 4].map(i => parseInt(h.slice(i, i + 2), 16)); };
+  const x = p(a), y = p(b);
+  return '#' + x.map((v, i) => Math.round(v + (y[i] - v) * t).toString(16).padStart(2, '0')).join('');
+}
+
+/* ---------- file reading ---------- */
+async function extractFile(file) {
+  const name = file.name, ext = name.split('.').pop().toLowerCase();
+  if (ext === 'pdf') return extractPdf(file);
+  if (ext === 'docx') {
+    if (!window.mammoth) throw new Error('DOCX 읽기 도구를 불러오지 못했어요. PDF로 저장해 올려 주세요.');
+    const r = await mammoth.extractRawText({ arrayBuffer: await file.arrayBuffer() });
+    return { name, pages: [clean(r.value)], images: [], pdf: false };
+  }
+  if (['txt', 'md', 'csv'].includes(ext)) return { name, pages: [clean(await file.text())], images: [], pdf: false };
+  if (['html', 'htm'].includes(ext)) {
+    const raw = (await file.text()).replace(/<(br|\/p|\/div|\/tr|\/li|\/h[1-6]|\/table)\b[^>]*>/gi, '$&\n').replace(/<\/t[dh]>/gi, '$& | ');
+    const d = new DOMParser().parseFromString(raw, 'text/html');
+    d.querySelectorAll('script,style').forEach(n => n.remove());
+    return { name, pages: [clean(d.body ? d.body.textContent : '')], images: [], pdf: false };
+  }
+  if (['jpg', 'jpeg', 'png', 'webp'].includes(ext)) return { name, pages: [], images: [file], pdf: false, scanned: true };
+  if (['hwp', 'hwpx'].includes(ext)) throw new Error('HWP 파일은 읽을 수 없어요. 한글에서 PDF로 저장한 뒤 올려 주세요.');
+  throw new Error('읽을 수 없는 형식이에요. PDF, DOCX, TXT, HTML, 이미지 파일을 올려 주세요.');
+}
+async function extractPdf(file) {
+  if (!window.pdfjsLib) throw new Error('PDF 읽기 도구를 불러오지 못했어요. 새로고침 후 다시 올려 주세요.');
+  pdfjsLib.GlobalWorkerOptions.workerSrc = PDF_WORKER;
+  const doc = await pdfjsLib.getDocument({ data: new Uint8Array(await file.arrayBuffer()) }).promise;
+  const pages = [];
+  for (let i = 1; i <= doc.numPages; i++) {
+    const tc = await (await doc.getPage(i)).getTextContent();
+    let t = '';
+    for (const it of tc.items) { t += it.str || ''; t += it.hasEOL ? '\n' : (it.str && !/\s$/.test(it.str) ? ' ' : ''); }
+    pages.push(t);
+  }
+  const chars = pages.join('').replace(/\s/g, '').length;
+  const images = [];
+  if (chars < doc.numPages * 60) {
+    for (let i = 1; i <= Math.min(doc.numPages, 20); i++) {
+      const pg = await doc.getPage(i), vp = pg.getViewport({ scale: 1.6 });
+      const c = document.createElement('canvas'); c.width = vp.width; c.height = vp.height;
+      await pg.render({ canvasContext: c.getContext('2d'), viewport: vp }).promise;
+      images.push(await new Promise(r => c.toBlob(r, 'image/jpeg', 0.82)));
+    }
+  }
+  return { name: file.name, pages: stripRepeated(pages).map(clean), images, pdf: true, pageCount: doc.numPages, scanned: images.length > 0 };
+}
+
+/* ---------- slots UI ---------- */
+function buildSlots() {
+  const host = $('#slots');
+  for (const s of SLOTS) {
+    const el = document.createElement('div');
+    el.className = 'slot'; el.id = 'slot-' + s.key;
+    el.innerHTML = `
+      <div class="slot-head"><span class="slot-title">${s.label}</span><span class="tag ${s.req ? 'req' : ''}">${s.req ? '필수' : '권장'}</span></div>
+      <div class="hint">${s.hint}</div>
+      <div class="slot-row">
+        <span class="pick"><span class="btn sm" aria-hidden="true">파일 선택</span><input type="file" id="file-${s.key}" aria-label="${s.label} 파일 선택" accept=".pdf,.docx,.txt,.md,.csv,.html,.htm,.jpg,.jpeg,.png,.webp,.hwp,.hwpx"></span>
+        <span class="status" id="st-${s.key}">또는 여기로 끌어다 놓기</span>
+      </div>
+      <details class="paste"><summary>텍스트로 붙여넣기</summary><textarea id="paste-${s.key}" placeholder="파일 대신 내용을 붙여넣어도 됩니다."></textarea></details>`;
+    host.appendChild(el);
+    const input = el.querySelector('input[type=file]');
+    input.addEventListener('change', () => input.files[0] && takeFile(s.key, input.files[0]));
+    el.addEventListener('dragover', e => { e.preventDefault(); el.classList.add('drag'); });
+    el.addEventListener('dragleave', () => el.classList.remove('drag'));
+    el.addEventListener('drop', e => { e.preventDefault(); el.classList.remove('drag'); const f = e.dataTransfer.files[0]; if (f) takeFile(s.key, f); });
+    el.querySelector('textarea').addEventListener('input', () => refreshSlot(s.key));
+  }
+}
+function setStatus(key, text, cls) {
+  const st = $('#st-' + key); st.textContent = text; st.className = 'status ' + (cls || '');
+  const el = $('#slot-' + key); el.classList.toggle('ok', cls === 'ok' || cls === 'warn'); el.classList.toggle('err', cls === 'err');
+}
+function refreshSlot(key) {
+  const f = files[key], pasted = $('#paste-' + key).value.trim();
+  if (f) return;
+  if (pasted) setStatus(key, `붙여넣은 텍스트 · ${pasted.length.toLocaleString()}자`, 'ok');
+  else setStatus(key, '또는 여기로 끌어다 놓기', '');
+}
+async function takeFile(key, file) {
+  files[key] = null;
+  setStatus(key, `${file.name} 읽는 중…`, '');
+  const p = extractFile(file);
+  reading[key] = p;
+  try {
+    const r = await p;
+    if (reading[key] !== p) return;
+    files[key] = r;
+    const chars = r.pages.join('').length;
+    if (r.scanned) setStatus(key, `${r.name} · 스캔본 ${r.images.length}쪽 (이미지로 전달)`, 'warn');
+    else setStatus(key, `${r.name} · ${r.pageCount ? r.pageCount + '쪽 · ' : ''}${chars.toLocaleString()}자`, chars > 50 ? 'ok' : 'warn');
+  } catch (e) {
+    if (reading[key] !== p) return;
+    setStatus(key, `${file.name}: ${e.message || '읽지 못했어요.'}`, 'err');
+  } finally { if (reading[key] === p) delete reading[key]; }
+}
+function source(key) {
+  if (files[key]) return files[key];
+  const t = $('#paste-' + key).value.trim();
+  return t ? { name: '붙여넣은 텍스트', pages: [clean(t)], images: [], pdf: false } : null;
+}
+
+/* ---------- packing documents into the prompt budget ---------- */
+function waterfill(need, w, budget) {
+  const out = {}; Object.keys(need).forEach(k => out[k] = 0);
+  let left = budget, active = Object.keys(need).filter(k => need[k] > 0);
+  while (active.length && left > 1) {
+    const tw = active.reduce((s, k) => s + w[k], 0);
+    let used = 0; const done = [];
+    for (const k of active) { const g = Math.min(Math.floor(left * w[k] / tw), need[k] - out[k]); out[k] += g; used += g; if (out[k] >= need[k]) done.push(k); }
+    left -= used;
+    if (!done.length) break;
+    active = active.filter(k => !done.includes(k));
+  }
+  return out;
+}
+function chunks(src) {
+  if (src.pdf || src.pages.length !== 1) return src.pages.map((t, i) => ({ label: src.pdf ? `p.${i + 1}` : `부분 ${i + 1}`, t }));
+  const out = []; let buf = '';
+  for (const line of src.pages[0].split('\n')) { if (buf.length + line.length > 3000 && buf) { out.push(buf); buf = ''; } buf += line + '\n'; }
+  if (buf.trim()) out.push(buf);
+  return out.map((t, i) => ({ label: `부분 ${i + 1}`, t }));
+}
+function selectGuide(parts, meta, budget) {
+  const dep = meta.dept.replace(/\s/g, '').replace(/(학과|학부|전공)$/, '');
+  const trk = meta.track.replace(/[\s\[\]()（）]/g, '');
+  const toks = trk.split(/[·,/]/).filter(x => x.length >= 2);
+  const scored = parts.map((p, i) => {
+    const c = p.t.replace(/\s/g, ''); let s = 0;
+    if (dep && c.includes(dep)) s += 3;
+    if (trk && c.includes(trk)) s += 4; else if (toks.some(x => c.includes(x))) s += 2;
+    if (c.includes('면접')) s += 2;
+    if (/평가요소|인재상|모집인원|반영비율|선발방법|수능최저|블라인드|단계|배수/.test(c)) s += 1;
+    return { i, s, block: `[${p.label}]\n${p.t}` };
+  });
+  let order = scored.filter(x => x.s > 0).sort((a, b) => b.s - a.s || a.i - b.i);
+  if (!order.length) order = scored;
+  const picked = []; let used = 0;
+  for (const x of order) {
+    const b = bytes(x.block) + 2;
+    if (used + b > budget) { if (!picked.length) picked.push({ i: x.i, t: cutBytes(x.block, budget) }); continue; }
+    picked.push({ i: x.i, t: x.block }); used += b;
+  }
+  return picked.sort((a, b) => a.i - b.i).map(x => x.t).join('\n\n');
+}
+function packDocs(rec, guide, past, meta, budget) {
+  const recText = rec.pages.join('\n\n');
+  const guideParts = chunks(guide);
+  const guideFull = guideParts.map(p => `[${p.label}]\n${p.t}`).join('\n\n');
+  const pastText = past ? chunks(past).map(p => `[${p.label}]\n${p.t}`).join('\n\n') : '';
+  const need = { rec: bytes(recText), guide: bytes(guideFull), past: bytes(pastText) };
+  const al = waterfill(need, { rec: .55, guide: .28, past: .17 }, budget);
+  return {
+    rec: cutBytes(recText, al.rec),
+    guide: need.guide <= al.guide ? guideFull : selectGuide(guideParts, meta, al.guide),
+    past: cutBytes(pastText, al.past),
+  };
+}
+
+/* ---------- prompts ---------- */
+function head(meta, imgNote) {
+  return `너는 대한민국 대학 수시모집 면접을 전문적으로 분석하는 고등학교 진학지도교사이자 대학 입학사정관 관점의 면접 컨설턴트다. 아래 자료를 종합해 고3 학생 개인에게 맞춘 실전형 모의면접 자료의 일부를 만든다. 분석은 철저하게, 질문과 모범답안은 간략하면서 핵심을 찌르게 쓴다.
+
+[기본 정보]
+- 학생명: ${meta.name || '(미입력)'}
+- 지원 대학: ${meta.univ} / 모집단위: ${meta.dept} / 전형: ${meta.track}
+- 대상: 2027학년도 수시모집 (현재 2026년 10월)
+- 사전 공개 면접 질문: ${meta.preset ? '있음' : '없음'}${meta.preset && meta.presetQs ? '\n- 교사가 입력한 사전 공개 문항:\n' + meta.presetQs.split('\n').filter(Boolean).map((q, i) => `  ${i + 1}. ${q}`).join('\n') : ''}
+${imgNote}
+[반드시 지킬 원칙]
+1. 근거 우선: 전형 정보(모집인원, 반영비율, 선발 배수, 면접 시간·방식, 면접위원 수, 평가요소·비율, 블라인드 여부, 제시문·MMI 여부)는 자료 2와 자료 3에 적힌 내용만 쓴다. 확인되지 않으면 숫자를 추측하지 말고 "❓ 확인 필요"라고 쓴다. 너는 인터넷을 검색할 수 없으므로 자료 밖 기억에 의존한 내용은 "⚠️ 공식 자료에서 명확한 근거를 찾지 못함"으로 표시한다. 이전 학년도 자료로 보이면 연도를 밝힌다.
+2. 출처: 전형 사실에는 근거를 짧게 단다 (예: "2027 모집요강 p.12", "업로드 면접 안내자료", "⚠️ 일반 정보·확인 필요"). 자료의 [p.N] 표시를 쪽수 근거로 쓴다.
+3. 학생부에 없는 활동·역할·동기·감정·성과·경험을 만들지 않는다. 학생부만으로 알 수 없는 개인적 동기·느낌·구체적 역할이 답안에 필요하면 그 자리에 [학생 본인의 실제 경험 확인 필요]라고 쓴다.
+4. 기출 자료의 실제 문항과 새로 만든 예상 문항을 구분한다. 새로 만든 문항을 실제 기출이라고 하지 않는다.
+5. 다른 대학의 면접 방식을 이 대학에 적용하지 않고, 대학이 실시하지 않는 면접 유형을 만들지 않는다.
+6. 모범답안은 고3 학생이 면접장에서 말하는 자연스러운 구어체, 발화 40초~1분(약 300~450자). ① 결론 → ② 근거 경험 → ③ 구체적 과정 → ④ 배운 점 → ⑤ 전공·향후 탐구 연결. 대학원 수준 지식 금지. 학생부 문장을 그대로 옮기지 말고 학생의 말로 바꾼다. 모든 답을 똑같은 틀로 쓰지 않는다.
+7. 블라인드 면접이면 답안에 학생 이름·출신고교·부모 직업을 넣지 않는다.
+8. 합격 가능성이나 면접 결과를 단정하지 않는다. 대학 인재상을 학생의 모든 활동에 억지로 연결하지 않는다.
+
+[표기 규칙]
+- 모든 값은 일반 텍스트. HTML 태그 금지.
+- 굵게: **텍스트**  /  핵심 강조(색): ==텍스트==  /  줄바꿈: \\n
+- 학생부 근거는 "2학년 화학Ⅰ 세특", "3학년 진로활동"처럼 학년·영역을 밝힌다.
+`;
+}
+const TASK_A = `
+[작업 A] 전형 분석, 학생부 분석, 위험 질문, 평가표를 아래 형태의 JSON 하나로만 답한다. 다른 글은 쓰지 않는다.
+{
+ "info":[{"item":"대학명 / 모집단위","detail":"**인하대학교 공과대학 산업경영공학과**","note":"정원 내 선발"}],
+ "type":{"main":"**서류 기반 심층 확인 및 전공적합성 면접** (제시문 없음, 학생부 기반 확인 질의)","sub":"**…** (…)","trend":["…","…","…"]},
+ "talent":[{"label":"대학 인재상","content":"…"},{"label":"학과 교육목표","content":"…"},{"label":"주요 교과목","content":"…"},{"label":"학생부 접점","content":"…"}],
+ "top10":[{"content":"2차전지 제조 시스템의 선형계획 모델링 및 병목공정 분석","area":"3학년 진로","reason":"…","likelihood":"매우 높음"}],
+ "risks":[{"factor":"수학 교과 성적의 상대적 기복","detail":"(1학년 공통수학 3등급, 2학년 수학Ⅱ 4등급)","question":"…","strategy":["…","…"],"avoid":"…"}],
+ "evaluation":{"note":"※ … 면접 평가요소 배점 기준 반영","rows":[{"area":"1. 기초학업역량 (33.3%)","sub":"대학 수학 기초 학업능력, 자기주도적 학습태도","points":"33.3","a":"… (30~33.3)","b":"… (25~29)","c":"… (24 이하)"}]},
+ "checks":["❓ …"]
+}
+규칙:
+- info는 이 8행을 이 순서로: 대학명 / 모집단위, 전형명, 모집인원, 선발 방식 및 반영비율(단계별 전형이면 항목명을 '선발 배수 및 방법'으로), 수능최저학력기준, 면접 형태 및 시간, 블라인드 평가 여부, 면접 평가요소 및 반영비율. detail의 핵심 값은 **굵게**. note에는 근거·비고.
+- type: 서류 기반, 학생부 확인, 전공적합성, 학업역량, 제시문 기반, 인·적성 및 소양, 상황, 다중미니면접(MMI), 토론·발표, 복합형 중에서 주된 유형과 보조 유형을 판별. 사전 공개 질문이 있으면 주된 유형은 '사전 공개 문항 중심 구술면접'. trend는 3~4개: 면접 방식과 시간에 맞는 답변 길이, 질문 경향, 꼬리질문 깊이, 이 학생 학생부에서 근거로 삼을 경험. 기출 자료에서 확인된 것과 추론을 구분하고 추론에는 ⚠️를 붙인다.
+- talent: 자료에 있는 인재상·교육목표·교육과정을 쓴다. 자료에 없으면 일반적으로 알려진 내용을 쓰되 끝에 "(⚠️ 학과 홈페이지 확인 필요)"를 붙인다. '학생부 접점'은 학생부의 실제 탐구를 학과 교육과정과 연결.
+- top10은 정확히 10개, 출제 가능성 순. likelihood는 "매우 높음"(4개 내외), "높음"(4개 내외), "보통"(2개 내외). 반복되는 관심 주제, 전공 직결 활동, 구체적 탐구, 후속 탐구가 있는 활동, 진로 변화의 계기, 학생부만으로 설명이 부족한 부분을 우선한다.
+- risks는 3~4개: 진로 변경, 성적 기복·하락, 고교 수준을 넘는 용어의 진위, 전공 연결이 약한 활동, 행동특성의 우려 등 학생부에서 실제로 보이는 것만. detail에는 근거 기록(과목·등급·문구). question은 실제 면접관 말투의 압박 질문. strategy 2개. avoid는 피해야 할 답변 예시 한 문장.
+- evaluation: 대학이 공개한 면접 평가요소와 비율을 100점 만점으로 환산해 쓰고 note에 근거를 쓴다. 공개 자료가 없으면 note를 "⚠️ 대학 공식 평가요소를 자료에서 찾지 못해 일반 기준 적용"으로 하고 학생부 이해 및 사실성 20, 학업역량 20, 전공 관심 및 탐구역량 20, 논리적 사고 및 표현 15, 자기주도성·성찰 10, 공동체역량·인성 10, 면접 태도 5로 구성. a(매우 우수)/b(우수)/c(보통 이하) 기준에는 이 학생의 실제 활동을 예로 들고 점수 구간을 괄호로 붙인다.
+- checks: 자료에서 확인되지 않은 전형 정보, 학생에게 물어 확인해야 할 경험 등 0~8개.
+`;
+const TASK_B = meta => `
+[작업 B] 예상 질문과 모범답안을 아래 형태의 JSON 하나로만 답한다. 다른 글은 쓰지 않는다.
+{
+ "questions":[{"q":"3학년 진로활동에서 …했습니다. …은 무엇입니까?","basis":"3학년 진로활동 세특 (핵심 기록 요약)","eval":"진로탐구역량, 논리적 문제해결력","level":"Level 3","answer":"…","keywords":"…, …, …","followups":["…","…","…"]}],
+ "deep":[{"q":"…","answer":"…"}],
+ "character":[{"q":"…","answer":"…"}],
+ "preset":[{"q":"…","eval":"…","strategy":"…","answer":"…","keywords":"…"}]
+}
+규칙:
+- questions는 정확히 10개, 출제 가능성 순. 질문에 학생부의 구체적 기록을 담는다. 영역을 고르게 섞는다: 학생부 사실 확인, 탐구 과정, 학업역량(개념·한계), 전공적합성, 대학·학과 적합성. 난이도는 Level 2~4 중심(Level 5 압박 질문은 1개 이하). 마지막 문항은 지원동기와 입학 후 계획. 서로 겹치지 않게 한다.
+- basis: 학년·영역과 근거 기록 요약. eval: 이 대학의 면접 평가요소 이름을 쓴다(자료에 없으면 일반 평가요소).
+- answer: 원칙 6을 지키고 ==핵심 문장==을 1~2곳 강조한다. 따옴표로 감싸지 않는다.
+- followups는 3개: 사실 확인 → 이유 → 과정 → 결과 → 한계 → 다른 선택 → 전공 연결 → 대학에서의 확장 흐름에서 고르고, 학생부의 다른 기록과 연결하는 질문을 1개 포함한다.
+- deep은 2개: 학생부 탐구에 근거한 전공 개념 심화 질문(고교 수준에서 답할 수 있게)과 전공지식형 모범답안.
+- character는 2개: 협업, 갈등 해결, 리더십, 배려, 책임감, 실패와 회복 중 학생부에 근거가 있는 경험.
+- preset: ${meta.preset ? (meta.presetQs ? '교사가 입력한 사전 공개 문항을 그대로, 같은 순서로 모두 쓴다.' : '자료 3·자료 2에서 대학이 공개한 사전 질문을 찾아 문구 그대로 쓴다. 찾지 못하면 빈 배열.') + ' eval은 해당 평가 항목, strategy는 학생부 근거를 어떻게 쓸지 한두 문장.' : '사전 공개 질문이 없으므로 빈 배열 [].'}
+- 기출 자료의 실제 문항을 그대로 쓴 질문은 q 끝에 " (실제 기출)", 바꿔 쓴 질문은 " (기출 변형)"을 붙인다. 새로 만든 질문에는 붙이지 않는다.
+`;
+
+/* ---------- generated document ---------- */
+function badge(l) { l = String(l || ''); return l.includes('매우') ? 'badge badge-red' : l.includes('높') ? 'badge badge-blue' : 'badge'; }
+function docCss(ac) {
+  const tint = mix(ac, '#ffffff', 0.93);
+  return `
+    body { font-family: 'Pretendard', 'Malgun Gothic', sans-serif; line-height: 1.6; color: #333; margin: 30px; background-color: #f8f9fa; }
+    .container { max-width: 960px; margin: 0 auto; background: #ffffff; padding: 40px; border-radius: 8px; box-shadow: 0 4px 15px rgba(0, 0, 0, 0.05); }
+    h1 { color: ${ac}; border-bottom: 3px solid ${ac}; padding-bottom: 12px; font-size: 26px; margin-top: 0; }
+    h2 { color: #1a365d; margin-top: 35px; font-size: 19px; border-left: 4px solid ${ac}; padding-left: 10px; margin-bottom: 15px; }
+    table { width: 100%; border-collapse: collapse; margin: 15px 0 25px 0; font-size: 13.5px; }
+    th, td { border: 1px solid #cbd5e0; padding: 9px 12px; text-align: left; vertical-align: top; }
+    th { background-color: #edf2f7; color: #1a202c; font-weight: 600; }
+    .text-center { text-align: center; }
+    .q-box { border: 1px solid #cbd5e0; border-radius: 6px; padding: 16px; margin-bottom: 20px; background-color: #ffffff; }
+    .q-title { font-weight: bold; font-size: 15.5px; color: ${ac}; margin-bottom: 8px; }
+    .q-meta { font-size: 13px; color: #4a5568; line-height: 1.5; margin-bottom: 10px; padding-bottom: 8px; border-bottom: 1px dashed #e2e8f0; }
+    .q-ans { background-color: ${tint}; padding: 12px 14px; border-left: 4px solid ${ac}; font-size: 13.5px; margin-bottom: 10px; line-height: 1.65; }
+    .q-followup { font-size: 13px; color: #2d3748; background-color: #edf2f7; padding: 10px 12px; border-radius: 4px; }
+    .highlight { font-weight: bold; color: ${ac}; }
+    .check { background-color: #fff3cd; color: #8a5a00; font-weight: 600; padding: 0 3px; border-radius: 3px; }
+    .badge { display: inline-block; padding: 2px 6px; font-size: 11px; font-weight: bold; border-radius: 4px; background-color: #e2e8f0; color: #4a5568; }
+    .badge-red { background-color: #fed7d7; color: #9b2c2c; }
+    .badge-blue { background-color: #bee3f8; color: #2b6cb0; }
+    .confirm { font-size: 13px; color: #4a5568; margin: 0; padding-left: 20px; }
+    @media print {
+      body { margin: 0; background: #fff; }
+      .container { box-shadow: none; padding: 0; max-width: 100%; }
+      .q-box, table { page-break-inside: avoid; }
+    }`;
+}
+function qBox(title, metaHtml, ans, follow) {
+  return `
+    <div class="q-box">
+      <div class="q-title">${title}</div>${metaHtml ? `
+      <div class="q-meta">
+        ${metaHtml}
+      </div>` : ''}
+      <div class="q-ans">
+        ${quote(fmt(ans))}
+      </div>${follow ? `
+      <div class="q-followup">
+        ${follow}
+      </div>` : ''}
+    </div>
+`;
+}
+function buildDoc(r) {
+  const m = r.meta, A = r.a || {}, B = r.b || {}, ac = r.accent || COLORS[0];
+  const T = A.type || {}, E = A.evaluation || {};
+  const title = `합격을 위한 ${esc(m.name || 'OOO')} 모의 면접 자료`;
+  const s = [];
+  s.push(`
+    <h2>1. 대학 및 전형 분석 표</h2>
+    <table>
+      <colgroup><col style="width: 25%;"><col style="width: 45%;"><col style="width: 30%;"></colgroup>
+      <thead><tr><th>항목</th><th>상세 내용</th><th>비고 / 공식 근거</th></tr></thead>
+      <tbody>
+${arr(A.info).map(x => `        <tr><td><strong>${esc(x.item)}</strong></td><td>${fmt(x.detail)}</td><td>${fmt(x.note)}</td></tr>`).join('\n')}
+      </tbody>
+    </table>`);
+  s.push(`
+    <h2>2. 면접 유형 판별 및 실제 출제경향</h2>
+    <table>
+      <colgroup><col style="width: 25%;"><col style="width: 75%;"></colgroup>
+      <tbody>
+        <tr><th>주된 유형</th><td>${fmt(T.main)}</td></tr>
+        <tr><th>보조 유형</th><td>${fmt(T.sub)}</td></tr>
+        <tr><th>실제 출제경향</th><td>
+            ${arr(T.trend).map(t => '• ' + fmt(t)).join('<br>\n            ')}
+        </td></tr>
+      </tbody>
+    </table>`);
+  s.push(`
+    <h2>3. 인재상 및 학과 커리큘럼 연계</h2>
+    <table>
+      <colgroup><col style="width: 25%;"><col style="width: 75%;"></colgroup>
+      <tbody>
+${arr(A.talent).map(x => `        <tr><th>${esc(x.label)}</th><td>${fmt(x.content)}</td></tr>`).join('\n')}
+      </tbody>
+    </table>`);
+  s.push(`
+    <h2>4. 면접관이 주목할 학생부 TOP 10</h2>
+    <table>
+      <colgroup><col style="width: 8%;"><col style="width: 42%;"><col style="width: 38%;"><col style="width: 12%;"></colgroup>
+      <thead><tr><th class="text-center">순위</th><th>학생부 기록 내용 (영역)</th><th>면접관이 주목할 이유</th><th class="text-center">출제 가능성</th></tr></thead>
+      <tbody>
+${arr(A.top10).map((x, i) => `        <tr><td class="text-center"><strong>${i + 1}</strong></td><td><strong>${fmt(x.content)}</strong>${x.area ? ` (${esc(x.area)})` : ''}</td><td>${fmt(x.reason)}</td><td class="text-center"><span class="${badge(x.likelihood)}">${esc(x.likelihood)}</span></td></tr>`).join('\n')}
+      </tbody>
+    </table>`);
+  s.push(`
+    <h2>5. 맞춤 예상 질문과 모범답안, 예상되는 꼬리질문</h2>
+${arr(B.questions).map((q, i) => qBox(
+    `Q${i + 1}. ${fmt(q.q)}`,
+    `• <strong>질문 근거:</strong> ${fmt(q.basis)}<br>\n        • <strong>평가 요소:</strong> ${fmt(q.eval)} | <strong>난이도:</strong> ${esc(q.level)}`,
+    q.answer,
+    `• <strong>핵심 키워드:</strong> ${fmt(q.keywords)}${arr(q.followups).map((f, j) => `<br>\n        • <strong>꼬리질문 ${j + 1}:</strong> ${fmt(f)}`).join('')}`
+  )).join('')}`);
+  s.push(`
+    <h2>6. 전공 학업 심화 질문</h2>
+${arr(B.deep).map((q, i) => qBox(`Q${i + 1}. ${fmt(q.q)}`, '', q.answer, '')).join('')}`);
+  s.push(`
+    <h2>7. 인성·공동체 질문</h2>
+${arr(B.character).map((q, i) => qBox(`Q${i + 1}. ${fmt(q.q)}`, '', q.answer, '')).join('')}`);
+  s.push(`
+    <h2>8. 반드시 대비해야 할 위험 질문</h2>
+    <table>
+      <colgroup><col style="width: 8%;"><col style="width: 24%;"><col style="width: 28%;"><col style="width: 25%;"><col style="width: 15%;"></colgroup>
+      <thead><tr><th class="text-center">번호</th><th>위험 요소 및 의문점</th><th>예상 압박 질문</th><th>답변 전략 및 가이드</th><th>피해야 할 답변</th></tr></thead>
+      <tbody>
+${arr(A.risks).map((x, i) => `        <tr><td class="text-center"><strong>위험 ${i + 1}</strong></td><td><strong>${fmt(x.factor)}</strong>${x.detail ? '<br>' + fmt(x.detail) : ''}</td><td>${quote(fmt(x.question))}</td><td>${arr(x.strategy).map(t => '• ' + fmt(t)).join('<br>')}</td><td>${quote(fmt(x.avoid))}</td></tr>`).join('\n')}
+      </tbody>
+    </table>`);
+  s.push(`
+    <h2>9. 모의면접 평가표 (100점 만점 기준)</h2>
+    <p style="font-size: 13px; color: #718096; margin-top: -8px;">${fmt(E.note || '')}</p>
+    <table>
+      <colgroup><col style="width: 25%;"><col style="width: 10%;"><col style="width: 22%;"><col style="width: 21%;"><col style="width: 22%;"></colgroup>
+      <thead><tr><th>평가 영역</th><th class="text-center">배점</th><th>매우 우수 (A)</th><th>우수 (B)</th><th>보통 (C) 이하</th></tr></thead>
+      <tbody>
+${arr(E.rows).map(x => `        <tr><td><strong>${esc(x.area)}</strong>${x.sub ? `<br><small>${esc(x.sub)}</small>` : ''}</td><td class="text-center"><strong>${esc(x.points)}</strong></td><td>${fmt(x.a)}</td><td>${fmt(x.b)}</td><td>${fmt(x.c)}</td></tr>`).join('\n')}
+      </tbody>
+    </table>`);
+  const pre = arr(B.preset);
+  if (pre.length) s.push(`
+    <h2>10. 대학 사전 공개 예상 질문 모범답안 (${esc(m.univ)} ${esc(m.dept)} 공식 ${pre.length}문항)</h2>
+${pre.map((p, i) => qBox(
+    `문항 ${i + 1}. ${fmt(p.q)}`,
+    `• <strong>평가 항목:</strong> ${fmt(p.eval)}<br>\n        • <strong>답변 전략:</strong> ${fmt(p.strategy)}`,
+    p.answer,
+    `• <strong>핵심 키워드:</strong> ${fmt(p.keywords)}`
+  )).join('')}`);
+  const checks = arr(A.checks);
+  if (checks.length) s.push(`
+    <h2>※ 확인이 필요한 사항</h2>
+    <ul class="confirm">
+${checks.map(c => `      <li>${fmt(c)}</li>`).join('\n')}
+    </ul>`);
+  return `<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>${title} - ${esc(m.univ)} ${esc(m.dept)}</title>
+  <style>${docCss(ac)}
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>${title}</h1>
+${s.join('\n')}
+
+  </div>
+</body>
+</html>
+`;
+}
+
+/* ---------- output panel ---------- */
+const frame = $('#frame');
+function fitFrame() { try { const d = frame.contentDocument; if (d && d.documentElement) frame.style.height = (d.documentElement.scrollHeight + 4) + 'px'; } catch (e) { } }
+frame.addEventListener('load', fitFrame);
+window.addEventListener('resize', () => requestAnimationFrame(fitFrame));
+function render(r) {
+  current = r;
+  const html = buildDoc(r);
+  frame.srcdoc = html;
+  $('#code').textContent = html;
+  const m = r.meta;
+  $('#meta-line').innerHTML = r.example
+    ? `<span class="tag ex">예시</span><span>지금 보이는 것은 샘플입니다. 자료를 올리고 생성하면 이 자리에 학생 자료가 나타납니다.</span>`
+    : `<span class="tag">${esc(m.name || '학생')}</span><span>${esc(m.univ)} · ${esc(m.dept)} · ${esc(m.track)}</span>${r.at ? `<span>· ${esc(r.at)} 생성</span>` : ''}`;
+}
+function fileName() {
+  const m = current.meta;
+  return [m.name || '학생', m.univ, m.dept, '모의면접자료'].filter(Boolean).join('_').replace(/[\\/:*?"<>|\s]+/g, '_') + '.html';
+}
+function toast(t) { $('#toast').textContent = t; clearTimeout(toast.t); toast.t = setTimeout(() => $('#toast').textContent = '', 3000); }
+function setTab(code) {
+  $('#tab-view').setAttribute('aria-selected', String(!code));
+  $('#tab-code').setAttribute('aria-selected', String(code));
+  frame.hidden = code; $('#codewrap').hidden = !code;
+  if (!code) requestAnimationFrame(fitFrame);
+}
+$('#tab-view').addEventListener('click', () => setTab(false));
+$('#tab-code').addEventListener('click', () => setTab(true));
+$('#btn-copy').addEventListener('click', () => {
+  const html = buildDoc(current);
+  const fallback = () => { setTab(true); const r = document.createRange(); r.selectNodeContents($('#code')); const s = getSelection(); s.removeAllRanges(); s.addRange(r); toast('코드를 선택했어요. Ctrl+C로 복사하세요.'); };
+  try { navigator.clipboard.writeText(html).then(() => toast('HTML 코드를 복사했어요.'), fallback); } catch (e) { fallback(); }
+});
+$('#btn-save').addEventListener('click', async () => {
+  if (!downloads || !current) return;
+  try { await downloads.save({ filename: fileName(), data: buildDoc(current) }); toast('저장했어요.'); }
+  catch (e) { if (e && e.code === 'declined') return; if (e && e.code === 'rate_limited') toast('잠시 후 다시 눌러 주세요.'); else { $('#btn-save').hidden = true; toast('이 화면에서는 저장할 수 없어요. 코드 복사를 이용하세요.'); } }
+});
+
+/* ---------- options ---------- */
+function buildSwatches() {
+  const host = $('#swatches');
+  COLORS.forEach(c => {
+    const b = document.createElement('button');
+    b.type = 'button'; b.className = 'sw'; b.style.background = c; b.setAttribute('aria-label', '강조색 ' + c); b.dataset.c = c;
+    b.addEventListener('click', () => { accent = c; markSwatch(); saveForm(); if (current) { current.accent = c; render(current); saveResult(); } });
+    host.appendChild(b);
+  });
+  markSwatch();
+}
+function markSwatch() { document.querySelectorAll('.sw').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.c === accent))); }
+$('#f-preset').addEventListener('change', e => { $('#preset-box').hidden = !e.target.checked; saveForm(); });
+
+/* ---------- persistence (per-viewer convenience) ---------- */
+const FORM_IDS = ['f-name', 'f-univ', 'f-dept', 'f-track', 'f-preset-qs'];
+function saveForm() {
+  try {
+    const st = JSON.parse(localStorage.getItem(STORE) || '{}');
+    st.form = Object.fromEntries(FORM_IDS.map(id => [id, $('#' + id).value]));
+    st.form.preset = $('#f-preset').checked; st.form.accent = accent;
+    localStorage.setItem(STORE, JSON.stringify(st));
+  } catch (e) { }
+}
+function saveResult() {
+  try { const st = JSON.parse(localStorage.getItem(STORE) || '{}'); st.result = current && !current.example ? current : st.result; localStorage.setItem(STORE, JSON.stringify(st)); } catch (e) { }
+}
+function load() {
+  try {
+    const st = JSON.parse(localStorage.getItem(STORE) || '{}');
+    if (st.form) {
+      FORM_IDS.forEach(id => { if (st.form[id] != null) $('#' + id).value = st.form[id]; });
+      $('#f-preset').checked = !!st.form.preset; $('#preset-box').hidden = !st.form.preset;
+      if (st.form.accent) accent = st.form.accent;
+    }
+    return st.result || null;
+  } catch (e) { return null; }
+}
+FORM_IDS.forEach(id => $('#' + id).addEventListener('input', saveForm));
+
+/* ---------- generation ---------- */
+function step(key, state, extra) {
+  const li = document.querySelector(`[data-step="${key}"] .pill`);
+  const labels = { wait: '대기', run: '진행 중', think: '생각 중…', done: '완료', err: '실패' };
+  li.className = 'pill ' + ({ run: 'run', think: 'run', done: 'done', err: 'err' }[state] || '');
+  li.textContent = state === 'write' ? `작성 중 · ${extra.toLocaleString()}자` : labels[state];
+  if (state === 'write') li.className = 'pill run';
+}
+function errCopy(e) {
+  const c = e && e.code;
+  return ({
+    cancelled: '중지했어요.',
+    not_granted: 'Claude 사용을 허용하지 않아 생성할 수 없어요. 페이지를 다시 열고 허용해 주세요.',
+    sampling_disabled: '이 계정에서는 Claude를 쓸 수 없어요.',
+    rate_limited: '사용량 한도에 걸렸어요. 잠시 후 다시 시도해 주세요.',
+    prompt_too_large: '자료가 너무 길어요. 모집요강은 해당 전형 부분만 올려 주세요.',
+    invalid_json: '결과 형식이 깨졌어요. 이 단계만 다시 실행해 주세요.',
+    refused: 'Claude가 이 요청을 처리하지 않았어요. 자료 내용을 확인해 주세요.',
+    session_expired: '다시 로그인한 뒤 시도해 주세요.',
+    image_rejected: '스캔 이미지를 처리하지 못했어요. 글자가 선택되는 PDF로 올려 주세요.',
+    images_unavailable: '이 화면에서는 스캔 이미지를 보낼 수 없어요. 글자가 선택되는 PDF로 올려 주세요.',
+    empty_completion: '결과가 비어 있어요. 다시 시도해 주세요.',
+  })[c] || '연결이 끊겼어요. 이 단계만 다시 실행해 주세요.';
+}
+function showErr(key, e) {
+  const host = $('#step-errs');
+  host.querySelector(`[data-err="${key}"]`)?.remove();
+  if (!e) return;
+  const d = document.createElement('div');
+  d.className = 'step-err'; d.dataset.err = key;
+  d.style.cssText = 'display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:6px';
+  d.innerHTML = `<span>${key === 'a' ? '전형·학생부 분석' : '예상 질문'}: ${esc(errCopy(e))}</span>`;
+  if (e.code !== 'not_granted' && e.code !== 'sampling_disabled') {
+    const b = document.createElement('button'); b.type = 'button'; b.className = 'btn sm'; b.textContent = '이 단계만 다시';
+    b.addEventListener('click', () => retry(key)); d.appendChild(b);
+  }
+  host.appendChild(d);
+}
+async function runPart(key) {
+  const ctl = new AbortController(); ctls[key] = ctl;
+  step(key, 'think'); showErr(key, null);
+  const opts = { modelTier: 'complex', cache: false, signal: ctl.signal, onText: ({ text }) => step(key, 'write', text.length) };
+  if (job.imgs.length) opts.images = job.imgs;
+  try {
+    const data = await sample.json(job.prompts[key], opts);
+    if (!data || typeof data !== 'object') throw { code: 'invalid_json' };
+    job.res[key] = data; step(key, 'done'); return true;
+  } catch (e) { step(key, 'err'); showErr(key, e); return false; }
+  finally { delete ctls[key]; }
+}
+function busy(on) {
+  $('#btn-go').disabled = on; $('#btn-stop').hidden = !on;
+  $('#btn-go').textContent = on ? '생성 중…' : '면접 자료 생성';
+}
+function finish() {
+  if (!(job.res.a && job.res.b)) return;
+  step('doc', 'run');
+  const now = new Date();
+  render({ meta: job.meta, a: job.res.a, b: job.res.b, accent, at: `${now.getMonth() + 1}월 ${now.getDate()}일 ${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}` });
+  saveResult(); setTab(false);
+  step('doc', 'done'); toast('면접 자료를 만들었어요.');
+}
+async function retry(key) {
+  if (!job || !sample) return;
+  busy(true);
+  await runPart(key);
+  busy(false); finish();
+}
+$('#btn-stop').addEventListener('click', () => Object.values(ctls).forEach(c => c.abort()));
+
+$('#form').addEventListener('submit', async ev => {
+  ev.preventDefault();
+  if (!sample) return;
+  const meta = {
+    name: $('#f-name').value.trim(), univ: $('#f-univ').value.trim(), dept: $('#f-dept').value.trim(), track: $('#f-track').value.trim(),
+    preset: $('#f-preset').checked, presetQs: $('#f-preset-qs').value.trim(),
+  };
+  const miss = [!meta.univ && '대학명', !meta.dept && '모집단위', !meta.track && '전형명'].filter(Boolean);
+  if (miss.length) { toast(''); alertBox(`${miss.join(', ')}을(를) 입력해 주세요.`); return; }
+  await Promise.all(Object.values(reading));
+  const rec = source('rec'), guide = source('guide'), past = source('past');
+  if (!rec || !guide) { alertBox(`${!rec ? '학교생활기록부' : '모집요강'} 자료를 올려 주세요.`); return; }
+  alertBox('');
+  $('#steps').hidden = false; $('#step-errs').innerHTML = '';
+  ['read', 'a', 'b', 'doc'].forEach(k => step(k, 'wait'));
+  busy(true); step('read', 'run');
+
+  // images from scanned sources, in order
+  let imgs = [...rec.images, ...guide.images, ...(past ? past.images : [])];
+  let imgNote = '';
+  if (imgs.length) {
+    if (!imageLimit) { step('read', 'err'); showErr('read', null); alertBox('스캔본(이미지) 자료는 이 화면에서 보낼 수 없어요. 글자가 선택되는 PDF로 올리거나 텍스트로 붙여넣어 주세요.'); busy(false); return; }
+    imgs = imgs.slice(0, imageLimit);
+    const parts = [rec.images.length && '학교생활기록부', guide.images.length && '모집요강', past && past.images.length && '면접 자료'].filter(Boolean);
+    imgNote = `- 참고: ${parts.join(', ')}의 일부가 스캔 이미지로 첨부되어 있다(첨부 순서: 학교생활기록부 → 모집요강 → 면접 자료). 이미지의 글자를 읽어 자료로 쓴다.\n`;
+  }
+  const h = head(meta, imgNote);
+  const instr = Math.max(bytes(h + TASK_A), bytes(h + TASK_B(meta))) + 600;
+  const docs = packDocs(rec, guide, past, meta, 250000 - instr);
+  const body = `\n[자료 1: 학교생활기록부]\n${docs.rec || '(스캔 이미지로 첨부)'}\n\n[자료 2: ${meta.univ} 모집요강 발췌]\n${docs.guide || '(스캔 이미지로 첨부)'}\n\n[자료 3: 면접 기출·안내 자료]\n${docs.past || '(제공되지 않음)'}\n`;
+  job = { meta, imgs, prompts: { a: h + body + TASK_A, b: h + body + TASK_B(meta) }, res: {} };
+  step('read', 'done');
+
+  await Promise.all([runPart('a'), runPart('b')]);
+  busy(false);
+  finish();
+});
+function alertBox(t) {
+  let n = $('#form-msg');
+  if (!n) { n = document.createElement('div'); n.id = 'form-msg'; n.className = 'notice'; n.setAttribute('role', 'alert'); $('.go').prepend(n); }
+  n.textContent = t; n.hidden = !t;
+}
+
+/* ---------- sample (example) data shown at rest ---------- */
+const EXAMPLE = {
+  example: true, accent: COLORS[1],
+  meta: { name: 'OOO', univ: '인하대학교', dept: '산업경영공학과', track: '인하미래인재(면접형)' },
+  a: {
+    info: [
+      { item: '대학명 / 모집단위', detail: '**인하대학교 공과대학 산업경영공학과**', note: '정원 내 선발' },
+      { item: '전형명', detail: '**학생부종합 [인하미래인재(면접형)]**', note: '단계별 전형' },
+      { item: '선발 배수 및 방법', detail: '**1단계(3.5배수): 서류종합평가 100%\n2단계: 1단계 성적 70% + 면접평가 30%**', note: '예시 값' },
+      { item: '면접 형태 및 시간', detail: '**수험생 1인 대 평가위원 2인, 8~10분 내외**', note: '제출서류 기반 확인 면접' },
+    ],
+    type: { main: '**서류 기반 심층 확인 및 전공적합성 면접** (제시문 없음)', sub: '**산업공학 수리 최적화 확인 면접**', trend: ['기재된 활동의 **진실성**과 **지적 성장 과정**을 검증함.', '꼬리질문이 2~3회 이어지므로 40초~1분 두괄식 답변이 필요함.'] },
+    talent: [{ label: '학생부 접점', content: '선형계획 모델링, 통계적 공정관리(SPC), 확률론적 재고 모델 등이 전공 교과목과 연결됨.' }],
+    top10: [
+      { content: '2차전지 제조 시스템의 선형계획 모델링 및 병목공정 분석', area: '3학년 진로', reason: '목적함수·제약조건 수립 능력 검증', likelihood: '매우 높음' },
+      { content: '확률론적 EOQ 재고 모델 심화', area: '3학년 미적분', reason: '정규분포와 정적분을 재고 관리에 연결한 수리적 깊이 점검', likelihood: '높음' },
+      { content: '학생회 부장 활동과 실패 극복', area: '자율 / 행특', reason: '낙선 경험을 성찰로 바꾼 소통 역량 확인', likelihood: '보통' },
+    ],
+    risks: [{ factor: '수학 교과 성적의 상대적 기복', detail: '(공통수학 3등급, 수학Ⅱ 4등급)', question: '수학 성적이 3~4등급인데 대학의 수리 과목을 따라갈 수 있겠습니까?', strategy: ['아쉬움을 인정하고 탐구에서 보인 적용력을 근거로 제시', '자기주도적으로 모델을 확장한 과정을 강조'], avoid: '시험이 너무 어려웠습니다.' }],
+    evaluation: { note: '※ 예시 평가표', rows: [{ area: '1. 진로탐구역량 (33.3%)', sub: '전공 관심, 탐구력', points: '33.3', a: '시스템 최적화 관점이 분명함 (30~33.3)', b: '진로 의식이 뚜렷함 (25~29)', c: '활동 나열에 그침 (24 이하)' }] },
+    checks: [],
+  },
+  b: {
+    questions: [{ q: '3학년 진로활동에서 2차전지 제조 시스템의 선형계획 모델을 세웠습니다. 목적함수와 제약조건은 어떻게 설정했습니까?', basis: '3학년 진로활동 세특 (제품별 이익 목적함수, 공정별 가용시간 제약)', eval: '진로탐구역량', level: 'Level 4', answer: '제품별 단위 이익을 계수로 두고 생산량을 결정변수로 해서 총이익을 최대화하는 목적함수를 세웠습니다. 제약조건은 공정별 가용 설비 시간과 최대 수요량이었습니다. 해찾기로 최적해를 구한 뒤 여유분이 0인 공정을 찾았고, ==그 공정이 전체 라인을 막는 병목==이라는 걸 확인했습니다.', keywords: '목적함수, 제약조건, 여유분, 병목공정', followups: ['정적 모델의 한계는 어떻게 보완할 수 있습니까?', '잠재가격(Shadow Price)의 의미를 설명해 보세요.', '[학생부 다른 기록] 스마트팜 모델과 공통 구조는 무엇입니까?'] }],
+    deep: [], character: [], preset: [],
+  },
+};
+
+/* ---------- boot ---------- */
+buildSlots(); buildSwatches();
+const saved = load(); markSwatch();
+render(saved || EXAMPLE);
+(async () => {
+  const use = window.claude && window.claude.use ? n => window.claude.use(n).catch(() => null) : async () => null;
+  const [s, d] = await Promise.all([use('sample'), use('downloads')]);
+  sample = s; downloads = d;
+  $('#btn-save').hidden = !downloads;
+  if (!sample) { $('#no-sample').hidden = false; $('#btn-go').disabled = true; $('#go-hint').hidden = true; return; }
+  try { const lim = await sample.limits(); imageLimit = lim && lim.images ? lim.images.maxCount : 0; } catch (e) { imageLimit = 0; }
+})();
+})();
+</script>
